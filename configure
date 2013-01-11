@@ -379,6 +379,14 @@ check_ffmpeg()
 	return 1
 }
 
+check_bass()
+{
+	check_header bass.h &&
+	check_library BASS "" "-lbass" &&
+	check_function "BASS_GetVersion" $BASS_CFLAGS $BASS_LIBS
+	return $?
+}
+
 check_string_function()
 {
 	msg_checking "for function $1"
@@ -438,6 +446,7 @@ Optional Features: y/n
   CONFIG_AAC      	AAC (.aac, audio/aac, audio/aacp)               [auto]
   CONFIG_FFMPEG   	FFMPEG (.shn, .wma)                             [auto]
   CONFIG_CUE    	CUE sheets (.cue)                               [auto]
+  CONFIG_BASS     	libbass (.mod, .x3m, ...)                       [auto]
   CONFIG_ROAR           native RoarAudio output                         [auto]
   CONFIG_PULSE    	native PulseAudio output                        [auto]
   CONFIG_ALSA     	ALSA                                            [auto]
@@ -498,6 +507,7 @@ check check_mp4     CONFIG_MP4
 check check_aac     CONFIG_AAC
 check check_ffmpeg  CONFIG_FFMPEG
 check check_cue     CONFIG_CUE
+check check_bass    CONFIG_BASS
 # nothing to check, just validate the variable values
 check true          CONFIG_TREMOR
 check true          CONFIG_WAV
@@ -542,7 +552,7 @@ config_header config/cue.h CONFIG_CUE
 CFLAGS="${CFLAGS} -DHAVE_CONFIG"
 
 makefile_vars bindir datadir libdir mandir exampledir
-makefile_vars CONFIG_CDIO CONFIG_FLAC CONFIG_MAD CONFIG_MIKMOD CONFIG_MODPLUG CONFIG_MPC CONFIG_VORBIS CONFIG_OPUS CONFIG_WAVPACK CONFIG_WAV CONFIG_MP4 CONFIG_AAC CONFIG_FFMPEG CONFIG_CUE
+makefile_vars CONFIG_CDIO CONFIG_FLAC CONFIG_MAD CONFIG_MIKMOD CONFIG_MODPLUG CONFIG_MPC CONFIG_VORBIS CONFIG_OPUS CONFIG_WAVPACK CONFIG_WAV CONFIG_MP4 CONFIG_AAC CONFIG_FFMPEG CONFIG_CUE CONFIG_BASS
 makefile_vars CONFIG_ROAR CONFIG_PULSE CONFIG_ALSA CONFIG_AO CONFIG_ARTS CONFIG_OSS CONFIG_SUN CONFIG_WAVEOUT
 
 generate_config_mk
