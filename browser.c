@@ -139,7 +139,7 @@ static int do_browser_load(const char *name)
 	if (S_ISREG(st.st_mode) && cmus_is_playlist(name)) {
 		char *buf;
 		int size;
-		
+
 		buf = mmap_file(name, &size);
 		if (size == -1)
 			return -1;
@@ -327,17 +327,17 @@ void browser_up(void)
 		new = xstrndup(browser_dir, ptr - browser_dir);
 	}
 
-	/* remember last position */
-	ptr++;
-	len = strlen(ptr);
-	pos = xstrdup(ptr);
-
 	if (browser_load(new)) {
 		error_msg("could not open directory '%s': %s\n", new, strerror(errno));
 		free(new);
 		return;
 	}
 	free(new);
+
+	/* remember last position */
+	ptr++;
+	len = strlen(ptr);
+	pos = xstrdup(ptr);
 
 	/* select */
 	list_for_each_entry(e, &browser_head, node) {

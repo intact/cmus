@@ -76,7 +76,7 @@ int player_repeat_current;
 
 enum replaygain replaygain;
 int replaygain_limit = 1;
-double replaygain_preamp = 6.0;
+double replaygain_preamp = 0.0;
 
 int soft_vol;
 int soft_vol_l;
@@ -233,7 +233,7 @@ static inline int sf_need_swap(sample_format_t sf)
 #define SCALE_SAMPLES(TYPE, buffer, count, l, r, swap)				\
 {										\
 	const int frames = count / sizeof(TYPE) / 2;				\
-	TYPE *buf = (TYPE *) buffer;						\
+	TYPE *buf = (void *) buffer;						\
 	int i;									\
 	/* avoid underflowing -32768 to 32767 when scale is 65536 */		\
 	if (l != SOFT_VOL_SCALE && r != SOFT_VOL_SCALE) {			\
@@ -367,7 +367,11 @@ static void update_rg_scale(void)
 		d_print("gain not available\n");
 		return;
 	}
-	if (!isnan(peak) && peak < 0.05) {
+	if (isnan(peak)) {
+		d_print("peak not available, defaulting to 1\n");
+		peak = 1;
+	}
+	if (peak < 0.05) {
 		d_print("peak (%g) is too small\n", peak);
 		return;
 	}
@@ -1065,7 +1069,7 @@ void player_exit(void)
 	producer_running = 0;
 	pthread_cond_broadcast(&producer_playing);
 	player_unlock();
-	
+
 	rc = pthread_join(consumer_thread, NULL);
 	BUG_ON(rc);
 	rc = pthread_join(producer_thread, NULL);

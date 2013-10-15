@@ -216,7 +216,7 @@ static int read_cache(void)
 
 	offset = sizeof(cache_header);
 	while (offset < size) {
-		struct cache_entry *e = (struct cache_entry *)(buf + offset);
+		struct cache_entry *e = (void *)(buf + offset);
 		struct track_info *ti;
 
 		if (!valid_cache_entry(e, size - offset))
@@ -253,7 +253,7 @@ int cache_init(void)
 	cache_header[4] = flags & 0xff;
 
 	/* assumed version */
-	cache_header[3] = 0x07;
+	cache_header[3] = 0x09;
 
 	cache_filename = xstrjoin(cmus_config_dir, "/cache");
 	return read_cache();

@@ -464,7 +464,7 @@ static int v2_3_0_frame_header_parse(struct v2_frame_header *header, const char 
 	int i;
 
 	for (i = 0; i < 4; i++) {
-		if (!is_frame_id_char(buf[i]))
+		if (!(is_frame_id_char(buf[i]) || (i == 3 && buf[i] == '\0')))
 			return 0;
 		header->id[i] = buf[i];
 	}
@@ -483,7 +483,7 @@ static int v2_4_0_frame_header_parse(struct v2_frame_header *header, const char 
 	int i;
 
 	for (i = 0; i < 4; i++) {
-		if (!is_frame_id_char(buf[i]))
+		if (!(is_frame_id_char(buf[i]) || (i == 3 && buf[i] == '\0')))
 			return 0;
 		header->id[i] = buf[i];
 	}
@@ -585,17 +585,16 @@ static struct {
 	{ "TS2",  ID3_ALBUMARTISTSORT },
 	{ "TSA",  ID3_ALBUMSORT },
 	{ "TCP",  ID3_COMPILATION },
-
-	{ "", -1 }
 };
 
 static int frame_tab_index(const char *id)
 {
-	int i;
+	int i = 0;
 
-	for (i = 0; frame_tab[i].key != -1; i++) {
+	while (i < N_ELEMENTS(frame_tab)) {
 		if (!strncmp(id, frame_tab[i].name, 4))
 			return i;
+		i++;
 	}
 	return -1;
 }

@@ -36,9 +36,9 @@ ssize_t convert(const char *inbuf, ssize_t inbuf_size,
 #ifdef HAVE_ICONV
 	const char *in;
 	char *out;
-	size_t outbuf_size, inbytesleft, outbytesleft;
+	size_t rc, outbuf_size, inbytesleft, outbytesleft;
 	iconv_t cd;
-	int rc, finished = 0, err_save;
+	int finished = 0, err_save;
 
 	cd = iconv_open(tocode, fromcode);
 	if (cd == (iconv_t) -1)
@@ -104,7 +104,7 @@ int utf8_encode(const char *inbuf, const char *encoding, char **outbuf)
 	outbuf_size = inbuf_size;
 	for (i = 0; i < inbuf_size; i++) {
 		unsigned char ch;
-		
+
 		ch = inbuf[i];
 		if (ch > 127)
 			outbuf_size++;

@@ -477,6 +477,7 @@ static void cmd_seek(char *arg)
 	switch (*arg) {
 	case '-':
 		sign = -1;
+		/* fallthrough */
 	case '+':
 		relative = 1;
 		arg++;
@@ -509,8 +510,10 @@ inside:
 		switch (tolower((unsigned char)*arg)) {
 		case 'h':
 			seek *= 60;
+			/* fallthrough */
 		case 'm':
 			seek *= 60;
+			/* fallthrough */
 		case 's':
 			arg++;
 			break;
@@ -864,7 +867,7 @@ static char *parse_one(const char **strp)
 	char *ret = NULL;
 
 	while (1) {
-		char *part;
+		char *part = NULL;
 		int c = *str;
 
 		if (!c || c == ' ')
@@ -894,6 +897,7 @@ static char *parse_one(const char **strp)
 			free(ret);
 			ret = tmp;
 		}
+		free(part);
 	}
 	*strp = str;
 	return ret;
@@ -1369,6 +1373,7 @@ static void add_from_browser(add_ti_cb add, int job_type)
 
 		if (ends_with(sel, "/../") || ends_with(sel, "/..")) {
 			info_msg("For convenience, you can not add \"..\" directory from the browser view");
+			free(sel);
 			return;
 		}
 
@@ -1889,7 +1894,7 @@ static void cmd_lqueue(char *arg)
 		struct album_list *a = container_of(item, struct album_list, node);
 		struct tree_track *t;
 		struct rb_node *tmp;
- 
+
 		rb_for_each_entry(t, tmp, &a->album->track_root, tree_node)
 			play_queue_append(tree_track_info(t));
 		free(a);

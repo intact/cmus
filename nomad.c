@@ -106,7 +106,7 @@ static inline int scale(mad_fixed_t sample)
 static inline double timer_to_seconds(mad_timer_t timer)
 {
 	signed long ms;
-	
+
 	ms = mad_timer_count(timer, MAD_UNITS_MILLISECONDS);
 	return (double)ms / 1000.0;
 }
@@ -239,8 +239,8 @@ static int xing_parse(struct nomad *nomad)
 		 * for this by assuming the tag began two octets prior and the
 		 * high bits of the following flags field are always zero.
 		 */
-		if (xing_id != ((XING_MAGIC << 16) & 0xffffffffL) &&
-				xing_id != ((INFO_MAGIC << 16) & 0xffffffffL))
+		if (xing_id != (((XING_MAGIC+0UL) << 16) & 0xffffffffL) &&
+				xing_id != (((INFO_MAGIC+0UL) << 16) & 0xffffffffL))
 			return -1;
 		xing_id >>= 16;
 		ptr = start;
@@ -628,7 +628,7 @@ void nomad_close(struct nomad *nomad)
 int nomad_read(struct nomad *nomad, char *buffer, int count)
 {
 	int i, j, size, psize, to;
-	
+
 	if (nomad->i == -1) {
 		int rc;
 
