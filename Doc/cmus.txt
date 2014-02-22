@@ -19,7 +19,7 @@ can be controlled from the outside via *cmus-remote*(1).
 @h1 OPTIONS
 
 --listen ADDR
-	Listen to ADDR (UNIX socket) instead of `~/.cmus/socket`.
+	Listen to ADDR (UNIX socket) instead of `$XDG_RUNTIME_DIR/cmus-socket`.
 	ADDR is either a UNIX socket or host[:port].
 
 	*WARNING*: Using host[:port] is insecure even with password!
@@ -78,10 +78,10 @@ Settings view (7)
 
 Everything in cmus is implemented as commands which can be typed at command
 line or bound to a key.  To enter command mode type *:*.  To execute a command
-press *ENTER* or to cancel press *ESC*.  Use up/down arrows to browse command
-history.  Use *TAB* to complete commands and parameters, you can tab complete
-almost anything.  You don't need to type full command names if the command is
-unambiguous (no other commands starting with the same characters).
+press *ENTER* or to cancel press *ESC* or *CTRL-C*.  Use up/down arrows to
+browse command history.  Use *TAB* to complete commands and parameters, you can
+tab complete almost anything.  You don't need to type full command names if the
+command is unambiguous (no other commands starting with the same characters).
 
 Examples:
 
@@ -394,7 +394,7 @@ clear [-l] [-p] [-q]
 
 colorscheme <name>
 	Change color scheme.  Color schemes are found in `/usr/share/cmus/` or
-	`~/.cmus/` and have .theme filename extension.
+	`$XDG_CONFIG_HOME/cmus/` and have .theme filename extension.
 
 echo <arg>...
 	Display arguments on the command line.
@@ -592,11 +592,11 @@ unmark
 	Unmark all tracks (see *mark*).
 
 update-cache [-f]
-	Update track metadata cache (~/.cmus/cache). Only files with changed
-	modification time or removed files are considered.
+	Update track metadata cache ($XDG_CONFIG_HOME/cmus/cache). Only files
+	with changed modification time or removed files are considered.
 
 	-f
-		Update all files. Same as quit, rm -f ~/.cmus/cache, start cmus.
+		Update all files. Same as quit, rm -f $XDG_CONFIG_HOME/cmus/cache, start cmus.
 
 view <name or 1-7>
 	Switches active view.
@@ -731,6 +731,12 @@ win-update-cache [-f]
 This section describes cmus' options that can be altered with the *set* and
 *toggle* commands. Default values are in parenthesis, possible values in
 brackets.
+
+auto_expand_albums (true)
+	When disabled, cmus will always select the artist instead of the album
+	when actions such as "search" or "go to current track" are executed.
+	This option is tightly coupled to the show_all_tracks option.
+	"auto_expand_albums = false" implies "show_all_tracks = true".
 
 auto_reshuffle (true)
 	Reshuffle playlist when end of shuffle list is reached.
@@ -959,6 +965,11 @@ rewind_offset (5) [-1-9999]
 
 scroll_offset (2) [0-9999]
 	Minimal number of screen lines to keep above and below the cursor.
+
+show_all_tracks (true)
+	Display all tracks of the artist when the artist is selected in the tree view.
+	This option is tightly coupled to the auto_expand_albums option.
+	"show_all_tracks = false" implies "auto_expand_albums = true".
 
 show_hidden (false)
 	Display hidden files in browser.
@@ -1324,14 +1335,14 @@ This command works in views 2-4.
 
 cmus reads its configuration from 3 different places.
 
-`~/.cmus/autosave`
+`$XDG_CONFIG_HOME/cmus/autosave`
 	This is the first file cmus loads.  cmus saves its state on exit to
 	this file so you shouldn't edit it.
 
 `/usr/share/cmus/rc`
 	If the autosave file didn't exist, this file is read instead.
 
-`~/.cmus/rc`
+`$XDG_CONFIG_HOME/cmus/rc`
 	Static config file. This file is read immediately after the autosave
 	file, and is never modified by cmus.  You can override auto-saved
 	settings in this file.  This file is not limited to options, it can
@@ -1341,7 +1352,7 @@ cmus reads its configuration from 3 different places.
 
 There are some color schemes (\*.theme) in `/usr/share/cmus`.  You can switch
 them using the *:colorscheme* command.  You can put your own color schemes to
-~/.cmus.
+$XDG_CONFIG_HOME/cmus.
 
 @h2 Examples
 
@@ -1355,7 +1366,7 @@ CMUS_CHARSET
 	Override cmus character set (default: \`locale charmap\`).
 
 CMUS_HOME
-	Override cmus config directory (default: *$HOME*/.cmus).
+	Override cmus config directory (default: $XDG_CONFIG_HOME/cmus).
 
 HOME
 	Full path of the user's home directory.

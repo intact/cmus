@@ -36,7 +36,7 @@ enum aaa_mode aaa_mode = AAA_MODE_ALL;
 /* used in ui_curses.c for status display */
 char *lib_live_filter = NULL;
 
-static struct rb_root lib_shuffle_root;
+struct rb_root lib_shuffle_root;
 static struct expr *filter = NULL;
 static int remove_from_hash = 1;
 
@@ -53,11 +53,6 @@ const char *artist_sort_name(const struct artist *a)
 		return a->auto_sort_name;
 
 	return a->name;
-}
-
-static inline struct tree_track *to_sorted(const struct list_head *item)
-{
-	return (struct tree_track *)container_of(item, struct simple_track, node);
 }
 
 static inline void sorted_track_to_iter(struct tree_track *track, struct iter *iter)
@@ -349,7 +344,7 @@ struct track_info *lib_set_track(struct tree_track *track)
 	return ti;
 }
 
-struct track_info *lib_set_next(void)
+struct track_info *lib_goto_next(void)
 {
 	struct tree_track *track;
 
@@ -369,7 +364,7 @@ struct track_info *lib_set_next(void)
 	return lib_set_track(track);
 }
 
-struct track_info *lib_set_prev(void)
+struct track_info *lib_goto_prev(void)
 {
 	struct tree_track *track;
 
@@ -400,7 +395,7 @@ static struct tree_track *sorted_get_selected(void)
 	return iter_to_sorted_track(&sel);
 }
 
-struct track_info *sorted_set_selected(void)
+struct track_info *sorted_activate_selected(void)
 {
 	return lib_set_track(sorted_get_selected());
 }

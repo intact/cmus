@@ -55,6 +55,7 @@
 #endif
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -105,6 +106,9 @@ int using_utf8 = 0;
 static char *lib_autosave_filename;
 static char *pl_autosave_filename;
 static char *play_queue_autosave_filename;
+
+static int notify_in;
+static int notify_out;
 
 /* shown error message and time stamp
  * error is cleared if it is older than 3s and key was pressed
@@ -284,8 +288,8 @@ static struct format_option track_fopts[NR_TFS + 1] = {
 	DEF_FO_INT('D', "discnumber", 1),
 	DEF_FO_INT('n', "tracknumber", 1),
 	DEF_FO_STR('t', "title", 0),
-	DEF_FO_STR('y', "date", 1),
-	DEF_FO_STR('\0', "originaldate", 1),
+	DEF_FO_INT('y', "date", 1),
+	DEF_FO_INT('\0', "originaldate", 1),
 	DEF_FO_STR('g', "genre", 0),
 	DEF_FO_STR('c', "comment", 0),
 	DEF_FO_TIME('d', "duration", 0),
@@ -614,7 +618,7 @@ static void fill_track_fopts_track_info(struct track_info *info)
 	fopt_set_int(&track_fopts[TF_DISC], info->discnumber, info->discnumber == -1);
 	fopt_set_int(&track_fopts[TF_TRACK], info->tracknumber, info->tracknumber == -1);
 	fopt_set_str(&track_fopts[TF_TITLE], info->title);
-	fopt_set_str(&track_fopts[TF_YEAR], keyvals_get_val(info->comments, "date"));
+	fopt_set_int(&track_fopts[TF_YEAR], info->date / 10000, info->date <= 0);
 	fopt_set_str(&track_fopts[TF_GENRE], info->genre);
 	fopt_set_str(&track_fopts[TF_COMMENT], info->comment);
 	fopt_set_time(&track_fopts[TF_DURATION], info->duration, info->duration == -1);
@@ -622,7 +626,7 @@ static void fill_track_fopts_track_info(struct track_info *info)
 	fopt_set_double(&track_fopts[TF_RG_TRACK_PEAK], info->rg_track_peak, isnan(info->rg_track_peak));
 	fopt_set_double(&track_fopts[TF_RG_ALBUM_GAIN], info->rg_album_gain, isnan(info->rg_album_gain));
 	fopt_set_double(&track_fopts[TF_RG_ALBUM_PEAK], info->rg_album_peak, isnan(info->rg_album_peak));
-	fopt_set_str(&track_fopts[TF_ORIGINALYEAR], keyvals_get_val(info->comments, "originaldate"));
+	fopt_set_int(&track_fopts[TF_ORIGINALYEAR], info->date / 10000, info->originaldate <= 0);
 	fopt_set_int(&track_fopts[TF_BITRATE], (int) (info->bitrate / 1000. + 0.5), info->bitrate == -1);
 	fopt_set_str(&track_fopts[TF_CODEC], info->codec);
 	fopt_set_str(&track_fopts[TF_CODEC_PROFILE], info->codec_profile);
@@ -651,12 +655,37 @@ static void fill_track_fopts_track_info(struct track_info *info)
 static void print_track(struct window *win, int row, struct iter *iter)
 {
 	struct tree_track *track;
+	struct album *album;
 	struct track_info *ti;
 	struct iter sel;
 	int current, selected, active;
 	const char *format;
 
 	track = iter_to_tree_track(iter);
+	album = iter_to_album(iter);
+
+	if (track == (struct tree_track*)album) {
+		int pos;
+
+		/* FIXME:
+		 * replace A_BOLD by something useful */
+		bkgdset(A_BOLD);
+		print_buffer[0] = ' ';
+		pos = format_str(print_buffer + 1, album->name, track_win_w - 2);
+		print_buffer[++pos] = ' ';
+		print_buffer[++pos] = 0;
+		dump_print_buffer(track_win_y + row + 1, track_win_x);
+
+		bkgdset(pairs[CURSED_SEPARATOR]);
+		pos = track_win_x + u_str_width(album->name) + 2;
+		while (pos < COLS) {
+			(void) mvaddch(track_win_y + row + 1, pos, ACS_HLINE);
+			pos++;
+		}
+
+		return;
+	}
+
 	current = lib_cur_track == track;
 	window_get_sel(win, &sel);
 	selected = iters_equal(iter, &sel);
@@ -2054,6 +2083,12 @@ static void u_getch(void)
 	handle_ch(u);
 }
 
+void ui_curses_notify(void)
+{
+	char c;
+	write(notify_in, &c, 1);
+}
+
 static void main_loop(void)
 {
 	int rc, fd_high;
@@ -2095,6 +2130,9 @@ static void main_loop(void)
 
 		FD_ZERO(&set);
 		FD_SET(0, &set);
+		FD_SET(notify_out, &set);
+		if (notify_out > fd_high)
+			fd_high = notify_out;
 		FD_SET(server_socket, &set);
 		list_for_each_entry(client, &client_head, node) {
 			FD_SET(client->fd, &set);
@@ -2161,6 +2199,11 @@ static void main_loop(void)
 
 		if (FD_ISSET(0, &set))
 			u_getch();
+
+		if (FD_ISSET(notify_out, &set)) {
+			char buf[128];
+			read(notify_out, buf, sizeof(buf));
+		}
 	}
 }
 
@@ -2172,9 +2215,9 @@ static int get_next(struct track_info **ti)
 	info = play_queue_remove();
 	if (info == NULL) {
 		if (play_library) {
-			info = lib_set_next();
+			info = lib_goto_next();
 		} else {
-			info = pl_set_next();
+			info = pl_goto_next();
 		}
 	}
 	editable_unlock();
@@ -2275,6 +2318,16 @@ static void init_curses(void)
 			t_fs = "\007";
 		}
 	}
+}
+
+static void notify_init(void)
+{
+	int fildes[2];
+	pipe(fildes);
+	notify_out = fildes[0];
+	notify_in = fildes[1];
+	int flags = fcntl(notify_in, F_GETFL, 0);
+	fcntl(notify_in, F_SETFL, flags | O_NONBLOCK);
 }
 
 static void init_all(void)
@@ -2380,7 +2433,7 @@ static const char *usage =
 "Usage: %s [OPTION]...\n"
 "Curses based music player.\n"
 "\n"
-"      --listen ADDR   listen on ADDR instead of ~/.cmus/socket\n"
+"      --listen ADDR   listen on ADDR instead of $XDG_RUNTIME_DIR/cmus-socket\n"
 "                      ADDR is either a UNIX socket or host[:port]\n"
 "                      WARNING: using TCP/IP is insecure!\n"
 "      --plugins       list available plugins and exit\n"
@@ -2441,7 +2494,7 @@ int main(int argc, char *argv[])
 
 	misc_init();
 	if (server_address == NULL)
-		server_address = xstrjoin(cmus_config_dir, "/socket");
+		server_address = xstrdup(cmus_socket_path);
 	debug_init();
 	d_print("charset = '%s'\n", charset);
 
@@ -2452,6 +2505,7 @@ int main(int argc, char *argv[])
 		op_dump_plugins();
 		return 0;
 	}
+	notify_init();
 	init_all();
 	main_loop();
 	exit_all();
