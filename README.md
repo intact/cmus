@@ -1,13 +1,13 @@
 cmus — C\* Music Player
 =======================
 
-http://cmus.sourceforge.net/
+https://cmus.github.io/
 
 [![Build Status](https://travis-ci.org/cmus/cmus.png?branch=master)](https://travis-ci.org/cmus/cmus)
 
 Copyright © 2004-2008 Timo Hirvonen <tihirvon@gmail.com>
 
-Copyright © 2008-2013 Various Authors
+Copyright © 2008-2014 Various Authors
 
 
 Configuration
@@ -85,8 +85,8 @@ http://lists.sourceforge.net/lists/listinfo/cmus-devel
 
 The list is open but moderated (you can post to the list without
 subscribing but it's not recommended because I have to accept each email
-form non-subscribed users).  Traffic of the list is low.
-
+from non-subscribed users).  Traffic of the list is extremely low.
+Please use the [issues](https://github.com/cmus/cmus/issues) page for any problems, suggestions, or bug reports.
 
 Reporting Bugs
 --------------

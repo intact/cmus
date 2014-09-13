@@ -242,6 +242,8 @@ P              win-mv-before
 tab            win-next
 ^F, page_down  win-page-down
 ^B, page_up    win-page-up
+^E             win-scroll-down
+^Y             win-scroll-up
 D, delete      win-remove
 i              win-sel-cur
 space          win-toggle
@@ -696,6 +698,12 @@ win-remove (*D*, *delete*)
 	Remove the selected entry.  For tracks no confirmations are made.  For
 	files (view 5), filters (view 6) and bindings (view 7) user has to
 	confirm the action.
+
+win-scroll-down (*^E*)
+	Scroll current window one row downwards.
+
+win-scroll-up (*^Y*)
+	Scroll current window one row upwards.
 
 win-sel-cur (*i*)
 	Select the current track (position in library or playlist, not
@@ -1167,6 +1175,15 @@ dsp.ao.wav_counter
 dsp.ao.wav_dir
 	Output directory for libao plugin, default is your home directory.
 	Used only if *dsp.ao.driver* is "wav".
+
+dsp.jack.server_name
+	Connect to jackd with this name. Leave empty for default.
+
+dsp.jack.resampling_quality 
+	Sets the quality of the re-sampling. 0 is low quality but fast, 1 is
+	medium quality, 2 (default) is high quality but more CPU intensiv. This
+	option is only available if cmus was compiled with libsamplerate
+	support.
 
 input.cdio.cddb_url
 	CDDB URL (default: freedb.freedb.org:8880). Use HTTP protocol if prefixed
