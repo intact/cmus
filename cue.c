@@ -40,7 +40,7 @@ struct cue_private {
 };
 
 
-static int __parse_cue_url(const char *url, char **filename, int *track_n)
+static int _parse_cue_url(const char *url, char **filename, int *track_n)
 {
 	const char *slash;
 	long n;
@@ -63,7 +63,7 @@ static int __parse_cue_url(const char *url, char **filename, int *track_n)
 }
 
 
-static double __to_seconds(long v)
+static double _to_seconds(long v)
 {
 	const int FRAMES_IN_SECOND = 75;
 
@@ -71,7 +71,7 @@ static double __to_seconds(long v)
 }
 
 
-static char *__make_absolute_path(const char *abs_filename, const char *rel_filename)
+static char *_make_absolute_path(const char *abs_filename, const char *rel_filename)
 {
 	char *s;
 	const char *slash;
@@ -100,7 +100,7 @@ static int cue_open(struct input_plugin_data *ip_data)
 
 	priv = xnew(struct cue_private, 1);
 
-	rc = __parse_cue_url(ip_data->filename, &priv->cue_filename, &priv->track_n);
+	rc = _parse_cue_url(ip_data->filename, &priv->cue_filename, &priv->track_n);
 	if (rc) {
 		rc = -IP_ERROR_INVALID_URI;
 		goto url_parse_failed;
@@ -112,7 +112,9 @@ static int cue_open(struct input_plugin_data *ip_data)
 		goto cue_open_failed;
 	}
 
-	cd = cue_parse_file__no_stderr_garbage(cue);
+	disable_stdio();
+	cd = cue_parse_file(cue);
+	enable_stdio();
 	if (cd == NULL) {
 		rc = -IP_ERROR_FILE_FORMAT;
 		goto cue_parse_failed;
@@ -129,7 +131,7 @@ static int cue_open(struct input_plugin_data *ip_data)
 		rc = -IP_ERROR_FILE_FORMAT;
 		goto cue_read_failed;
 	}
-	child_filename = __make_absolute_path(priv->cue_filename, child_filename);
+	child_filename = _make_absolute_path(priv->cue_filename, child_filename);
 
 	priv->child = ip_new(child_filename);
 	free(child_filename);
@@ -140,7 +142,7 @@ static int cue_open(struct input_plugin_data *ip_data)
 
 	ip_setup(priv->child);
 
-	priv->start_offset = __to_seconds(track_get_start(t));
+	priv->start_offset = _to_seconds(track_get_start(t));
 	priv->current_offset = priv->start_offset;
 
 	rc = ip_seek(priv->child, priv->start_offset);
@@ -148,7 +150,7 @@ static int cue_open(struct input_plugin_data *ip_data)
 		goto ip_open_failed;
 
 	if (track_get_length(t) != 0)
-		priv->end_offset = priv->start_offset + __to_seconds(track_get_length(t));
+		priv->end_offset = priv->start_offset + _to_seconds(track_get_length(t));
 	else
 		priv->end_offset = ip_duration(priv->child);
 
@@ -263,7 +265,9 @@ static int cue_read_comments(struct input_plugin_data *ip_data, struct keyval **
 		goto cue_open_failed;
 	}
 
-	cd = cue_parse_file__no_stderr_garbage(cue);
+	disable_stdio();
+	cd = cue_parse_file(cue);
+	enable_stdio();
 	if (cd == NULL) {
 		rc = -IP_ERROR_FILE_FORMAT;
 		goto cue_parse_failed;
@@ -276,7 +280,7 @@ static int cue_read_comments(struct input_plugin_data *ip_data, struct keyval **
 	}
 
 	snprintf(buf, sizeof buf, "%d", priv->track_n);
-	comments_add(&c, "tracknumber", xstrdup(buf));
+	comments_add_const(&c, "tracknumber", buf);
 
 	cd_rem = cd_get_rem(cd);
 	cd_cdtext = cd_get_cdtext(cd);
@@ -285,27 +289,27 @@ static int cue_read_comments(struct input_plugin_data *ip_data, struct keyval **
 
 	val = cdtext_get(PTI_TITLE, track_cdtext);
 	if (val != NULL)
-		comments_add(&c, "title", xstrdup(val));
+		comments_add_const(&c, "title", val);
 
 	val = cdtext_get(PTI_TITLE, cd_cdtext);
 	if (val != NULL)
-		comments_add(&c, "album", xstrdup(val));
+		comments_add_const(&c, "album", val);
 
 	val = cdtext_get(PTI_PERFORMER, track_cdtext);
 	if (val != NULL)
-		comments_add(&c, "artist", xstrdup(val));
+		comments_add_const(&c, "artist", val);
 
 	val = cdtext_get(PTI_PERFORMER, cd_cdtext);
 	if (val != NULL)
-		comments_add(&c, "albumartist", xstrdup(val));
+		comments_add_const(&c, "albumartist", val);
 
 	val = rem_get(REM_DATE, track_rem);
 	if (val != NULL) {
-		comments_add(&c, "date", xstrdup(val));
+		comments_add_const(&c, "date", val);
 	} else {
 		val = rem_get(REM_DATE, cd_rem);
 		if (val != NULL)
-			comments_add(&c, "date", xstrdup(val));
+			comments_add_const(&c, "date", val);
 	}
 
 	/*

@@ -3,11 +3,11 @@ cmus — C\* Music Player
 
 https://cmus.github.io/
 
-[![Build Status](https://travis-ci.org/cmus/cmus.png?branch=master)](https://travis-ci.org/cmus/cmus)
+[![Build Status](https://travis-ci.org/cmus/cmus.svg?branch=master)](https://travis-ci.org/cmus/cmus)
 
 Copyright © 2004-2008 Timo Hirvonen <tihirvon@gmail.com>
 
-Copyright © 2008-2014 Various Authors
+Copyright © 2008-2015 Various Authors
 
 
 Configuration

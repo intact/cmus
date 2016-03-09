@@ -19,7 +19,8 @@ can be controlled from the outside via *cmus-remote*(1).
 @h1 OPTIONS
 
 --listen ADDR
-	Listen to ADDR (UNIX socket) instead of `$XDG_RUNTIME_DIR/cmus-socket`.
+	Listen to ADDR (UNIX socket) instead of `$CMUS_SOCKET` or 
+	`$XDG_RUNTIME_DIR/cmus-socket`.
 	ADDR is either a UNIX socket or host[:port].
 
 	*WARNING*: Using host[:port] is insecure even with password!
@@ -145,7 +146,7 @@ prepend tracks to the play queue (4)
 
 @h2 Moving Tracks
 
-In views 2-4 you can move tracks withing the list. Note that moving is
+In views 2-4 you can move tracks within the list. Note that moving is
 disabled if the view is auto-sorted (see *lib_sort* and *pl_sort* options).
 
 Pressing *p* moves marked tracks to the position immediately after the
@@ -190,65 +191,65 @@ COMMANDS section.
 
 @h2 Common Context
 @pre
-q              quit -i
-^C             echo Type :quit<enter> to exit cmus.
-I              echo {}
-b              player-next
-c              player-pause
-x              player-play
-z              player-prev
-v              player-stop
-^L             refresh
-n              search-next
-N              search-prev
-.              seek +1m
-l, right       seek +5
-,              seek -1m
-h, left        seek -5
-m              toggle aaa_mode
-C              toggle continue
-M              toggle play_library
-o              toggle play_sorted
-r              toggle repeat
-^R             toggle repeat_current
-t              toggle show_remaining_time
-s              toggle shuffle
-F              push filter<space>
-L              push live-filter<space>
-u              update-cache
-1              view tree
-2              view sorted
-3              view playlist
-4              view queue
-5              view browser
-6              view filters
-7              view settings
-!              push shell<space>
-]              vol +0 +1
-[              vol +1 +0
-+, =           vol +10%
-}              vol -0 -1
-{              vol -1 -0
--              vol -10%
-enter          win-activate
-E              win-add-Q
-a              win-add-l
-y              win-add-p
-e              win-add-q
-G, end         win-bottom
-down, j        win-down
-p              win-mv-after
-P              win-mv-before
-tab            win-next
-^F, page_down  win-page-down
-^B, page_up    win-page-up
-^E             win-scroll-down
-^Y             win-scroll-up
-D, delete      win-remove
-i              win-sel-cur
-space          win-toggle
-g, home        win-top
-k, up          win-up
+q                           quit -i
+^C                          echo Type :quit<enter> to exit cmus.
+I                           echo {}
+b                           player-next
+c                           player-pause
+x                           player-play
+z                           player-prev
+v                           player-stop
+^L                          refresh
+n                           search-next
+N                           search-prev
+.                           seek +1m
+l, right                    seek +5
+,                           seek -1m
+h, left                     seek -5
+m                           toggle aaa_mode
+C                           toggle continue
+M                           toggle play_library
+o                           toggle play_sorted
+r                           toggle repeat
+^R                          toggle repeat_current
+t                           toggle show_remaining_time
+s                           toggle shuffle
+F                           push filter<space>
+L                           push live-filter<space>
+u                           update-cache
+1                           view tree
+2                           view sorted
+3                           view playlist
+4                           view queue
+5                           view browser
+6                           view filters
+7                           view settings
+!                           push shell<space>
+]                           vol +0 +1
+[                           vol +1 +0
++, =                        vol +10%
+}                           vol -0 -1
+{                           vol -1 -0
+-                           vol -10%
+enter, mlb_click_selected   win-activate
+E                           win-add-Q
+a                           win-add-l
+y                           win-add-p
+e                           win-add-q
+G, end                      win-bottom
+down, j, mouse_scroll_down  win-down
+p                           win-mv-after
+P                           win-mv-before
+tab                         win-next
+^F, page_down               win-page-down
+^B, page_up                 win-page-up
+^E                          win-scroll-down
+^Y                          win-scroll-up
+D, delete                   win-remove
+i                           win-sel-cur
+space                       win-toggle
+g, home                     win-top
+k, up, mouse_scroll_up      win-up
 @endpre
 
 @h2 Browser Context
@@ -484,6 +485,9 @@ push <text>
 	This command can only be bound to a key but not used in the command
 	line directly.
 
+pwd
+	Prints the current working directory.
+
 quit [-i] (*q*, *:wq*)
 	Exit cmus.
 
@@ -662,8 +666,8 @@ win-add-q (*e*)
 win-bottom (*G*, *end*)
 	Goto bottom of the current window.
 
-win-down (*j*, *down*)
-	Goto down one row in the current window.
+win-down [NUM] (*j*, *down*)
+	Goto down NUM (default 1) rows in the current window.
 
 win-mv-after (*p*)
 	If no tracks are marked, move the selected track down one row. If any
@@ -717,8 +721,8 @@ win-toggle (*space*)
 win-top (*g*, *home*)
 	Goto top of the current window.
 
-win-up (*k*, *up*)
-	Goto up one row in the current window.
+win-up [NUM] (*k*, *up*)
+	Goto up NUM (default 1) rows in the current window.
 
 win-update (*u*)
 	Checks the modification time of the files in the library, and updates
@@ -740,11 +744,12 @@ This section describes cmus' options that can be altered with the *set* and
 *toggle* commands. Default values are in parenthesis, possible values in
 brackets.
 
-auto_expand_albums (true)
-	When disabled, cmus will always select the artist instead of the album
-	when actions such as "search" or "go to current track" are executed.
-	This option is tightly coupled to the show_all_tracks option.
-	"auto_expand_albums = false" implies "show_all_tracks = true".
+auto_expand_albums_follow, auto_expand_albums_search, auto_expand_albums_selcur (true)
+	When enabled, cmus will always open an artist and select the album when
+	following the currently played track or performing actions such as "search"
+	or "go to current track". This option is tightly coupled to the
+	show_all_tracks option. Any "auto_expand_albums_* = false" implies
+	"show_all_tracks = true".
 
 auto_reshuffle (true)
 	Reshuffle playlist when end of shuffle list is reached.
@@ -759,15 +764,24 @@ altformat_current [`Format String`]
 	Alternative format string for the line displaying currently playing
 	track.
 
+	NOTE: if empty, *format_current* is used instead.
+
 altformat_playlist [`Format String`]
 	Alternative format string for the list views (2-4).
 
+	NOTE: if empty, *format_playlist* is used instead.
+
 altformat_title [`Format String`]
-	Alternative format string for terminal title.  NOTE: not all
-	terminals support changing window title.
+	Alternative format string for terminal title.
+
+	NOTE: not all terminals support changing window title.
+
+	NOTE: if empty, *format_title* is used instead.
 
 altformat_trackwin [`Format String`]
 	Alternative format string for the tree view's (1) track window.
+
+	NOTE: if empty, *format_trackwin* is used instead.
 
 buffer_seconds (10) [1-300]
 	Size of player buffer in seconds.
@@ -901,6 +915,11 @@ format_playlist_va [`Format String`]
 	Format string for the list views (2-4), if a track is assumed to be a
 	part of compilation (see `LIBRARY VIEW SORTING` for details).
 
+	NOTE: if empty, *format_playlist* is used instead.
+
+format_statusline [`Format String`]
+	Format string for status line.
+
 format_title [`Format String`]
 	Format string for terminal title.
 
@@ -909,10 +928,21 @@ format_title [`Format String`]
 format_trackwin [`Format String`]
 	Format string for the tree view's (1) track window.
 
+format_trackwin_album [`Format String`]
+	Format string for albums in tree view's (1) track window.
+
 format_trackwin_va [`Format String`]
 	Format string for the tree view's (1) track window, if a track
 	is assumed to be a part of compilation (see `LIBRARY VIEW SORTING`
 	for details).
+
+	NOTE: if empty, *format_trackwin* is used instead.
+
+format_treewin [`Format String`]
+	Format string for the tree view's (1) tree window.
+
+format_treewin_artist [`Format String`]
+	Format string for artists in tree view's (1) tree window.
 
 smart_artist_sort (true)
 	If enabled, makes tree view sorting ignore "The" in front of artist
@@ -932,7 +962,13 @@ icecast_default_charset (ISO-8859-1)
 lib_sort (artist album discnumber tracknumber title filename) [`Sort Keys`]
 	Sort keys for the sorted library view (2).
 
-output_plugin [roar, pulse, alsa, arts, oss, sun]
+mouse (false)
+	Enable mouse support.
+
+	NOTE: Mouse wheel scrolling can lag if cmus is compiled with
+	old version of Ncurses.
+
+output_plugin [roar, pulse, alsa, arts, oss, sndio, sun]
 	Name of output plugin.
 
 pl_sort () [`Sort Keys`]
@@ -975,9 +1011,9 @@ scroll_offset (2) [0-9999]
 	Minimal number of screen lines to keep above and below the cursor.
 
 show_all_tracks (true)
-	Display all tracks of the artist when the artist is selected in the tree view.
-	This option is tightly coupled to the auto_expand_albums option.
-	"show_all_tracks = false" implies "auto_expand_albums = true".
+	Display all tracks of the artist when the artist is selected in the tree 
+	view. This option is tightly coupled to the auto_expand_albums_* options.
+	"show_all_tracks = false" implies "auto_expand_albums_* = true".
 
 show_hidden (false)
 	Display hidden files in browser.
@@ -1069,6 +1105,7 @@ Special Keys:
 	%l  %{album}		@br
 	%D  %{discnumber}	@br
 	%n  %{tracknumber}	@br
+	%X  %{play_count}	@br
 	%t  %{title}		@br
 	%g  %{genre}		@br
 	%c  %{comment}		@br
@@ -1077,6 +1114,7 @@ Special Keys:
 	%f  %{path}		@br
 	%F  %{filename}		@br
 	    %{originaldate}	@br
+	    %{maxdate}		@br
 	    %{bitrate}		@br
 	    %{codec}		@br
 	    %{codec_profile}	@br
@@ -1102,6 +1140,8 @@ Special Keys:
 		start align right (use at most once)
 	%%
 		literal *%*
+	%?
+		literal *?*
 
 You can use printf style formatting (width, alignment, padding). As an
 extension, the width can have a %-suffix, to specify a percentage of the
@@ -1111,10 +1151,21 @@ To see current value of an option type *:set option=<TAB>*.
 Note: With %{bitrate}, you'll have to append the unit yourself, as mentioned
 in the example below.
 
+You can use conditional operator *%{?CONDITION?A[?B]}*.
+CONDITION has the same syntax as `filters`, except for unsupported short and
+simple expressions and supported keys comparison (e.g. artist=albumartist).
+Its keys are:
+	format strings' special keys @br
+	configuration options @br
+	keyword *stream* [boolean] (returns true if track is a stream) @br
+	keyword *va* [boolean] (returns true if track's album is compilation)
+Else part can be skipped. A and B can contain string literals in *"* or *'*.
+A and B can be empty.
+
 Examples:
 
 	@pre
-	:set format_trackwin= %02n. %t (%y)%= %d
+	:set format_trackwin= %02n. %t %{?y?(%y)}%= %d
 	:set format_current= %n. %-30t %40F (%y)%= %d
 	:set format_current= %a - %l - %02n. %t%= %{bitrate}Kbps %g %y
 	:set format_playlist= %f%= %6{rg_track_gain} dB  %8{rg_track_peak}
@@ -1126,10 +1177,10 @@ Examples:
 Sort option (lib_sort, pl_sort) value is space separated list of the following
 sort keys:
 
-	artist, album, title, tracknumber, discnumber, date, originaldate,
-	genre, comment, albumartist, filename, filemtime, bitrate, codec,
-	media, codec_profile, rg_track_gain, rg_track_peak, rg_album_gain,
-	rg_album_peak
+	artist, album, title, tracknumber, play_count, discnumber, date,
+	originaldate, genre, comment, albumartist, filename, filemtime,
+	bitrate, codec, media, codec_profile, rg_track_gain, rg_track_peak,
+	rg_album_gain, rg_album_peak
 
 Note: Adding a '-' in front of the key will sort in reverse order
 
@@ -1345,7 +1396,10 @@ Filter all artists/albums/titles containing "sleepwalking"
 Mark (select) all tracks with duration less than 2 minutes
 	:mark duration<120
 
-This command works in views 2-4.
+Mark (select) all tracks which have been played at least once
+	:mark play_count>=1
+
+These commands work in views 2-4.
 
 
 @h1 FILES
@@ -1384,6 +1438,9 @@ CMUS_CHARSET
 
 CMUS_HOME
 	Override cmus config directory (default: $XDG_CONFIG_HOME/cmus).
+
+CMUS_SOCKET
+	Override cmus socket path (default: $XDG_RUNTIME_DIR/cmus-socket).
 
 HOME
 	Full path of the user's home directory.

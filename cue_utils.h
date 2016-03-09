@@ -16,9 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#ifndef __CUE_UTILS_H__
-#define __CUE_UTILS_H__
+#ifndef CMUS_CUE_UTILS_H
+#define CMUS_CUE_UTILS_H
 
 #include <stdio.h>
 
@@ -27,12 +26,6 @@
  */
 #include <libcue/libcue.h>
 
-
-/*
- * libcue developers think that printing parsing errors to stderr is a good idea
- * they are wrong
- */
-Cd *cue_parse_file__no_stderr_garbage(FILE *f);
 
 char *associated_cue(const char *filename);
 int cue_get_ntracks(const char *filename);

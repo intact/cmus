@@ -552,6 +552,7 @@ static struct album *album_new(struct artist *artist, const char *name,
 	album->collkey_name = u_strcasecoll_key(name);
 	album->collkey_sort_name = u_strcasecoll_key0(sort_name);
 	album->date = date;
+	album->min_date = date;
 	rb_root_init(&album->track_root);
 	album->artist = artist;
 
@@ -731,7 +732,7 @@ static int tree_search_matches(void *data, struct iter *iter, const char *text)
 	if (!track_info_matches(tree_track_info(track), text, flags))
 		return 0;
 
-	if(auto_expand_albums) {
+	if (auto_expand_albums_search) {
 		/* collapse old search result */
 		if (collapse_artist) {
 			struct artist *artist = do_find_artist(collapse_artist, &lib_artist_root, NULL, NULL);
@@ -995,6 +996,16 @@ void tree_add_track(struct tree_track *track)
 			if (artist->expanded)
 				window_changed(lib_tree_win);
 		}
+
+		if (album->min_date <= 0 || (album->min_date > date && date > 0)) {
+			album->min_date = date;
+
+			remove_album(album);
+			add_album(album);
+			if (artist->expanded)
+				window_changed(lib_tree_win);
+		}
+
 	} else if (artist) {
 		add_album(new_album);
 		album_add_track(new_album, track);
@@ -1142,7 +1153,7 @@ void tree_expand_matching(const char *text)
 			if (album_matched || track_matched) {
 				if (!tree_track)
 					tree_track = to_tree_track(rb_first(&album->track_root));
-				tree_sel_track(tree_track);
+				tree_sel_track(tree_track, auto_expand_albums_search);
 				have_track_selected = 1;
 			}
 		}
@@ -1236,9 +1247,9 @@ void tree_sort_artists(void)
 	}
 }
 
-void tree_sel_current(void)
+void tree_sel_current(int auto_expand_albums)
 {
-	tree_sel_track(lib_cur_track);
+	tree_sel_track(lib_cur_track, auto_expand_albums);
 }
 
 void tree_sel_first(void)
@@ -1247,11 +1258,11 @@ void tree_sel_first(void)
 		struct artist *artist = to_artist(rb_first(&lib_artist_root));
 		struct album *album = to_album(rb_first(&artist->album_root));
 		struct tree_track *tree_track = to_tree_track(rb_first(&album->track_root));
-		tree_sel_track(tree_track);
+		tree_sel_track(tree_track, auto_expand_albums_search);
 	}
 }
 
-void tree_sel_track(struct tree_track *t)
+void tree_sel_track(struct tree_track *t, int auto_expand_albums )
 {
 	if (t) {
 		struct iter iter;
@@ -1322,7 +1333,7 @@ static int artist_for_each_track(struct artist *artist, int (*cb)(void *data, st
 	return rc;
 }
 
-int __tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse)
+int _tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse)
 {
 	int rc = 0;
 
@@ -1352,7 +1363,7 @@ int __tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data
 
 int tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse)
 {
-	int rc = __tree_for_each_sel(cb, data, reverse);
+	int rc = _tree_for_each_sel(cb, data, reverse);
 
 	window_down(lib_cur_win, 1);
 	return rc;

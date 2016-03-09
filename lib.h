@@ -16,8 +16,8 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LIB_H
-#define LIB_H
+#ifndef CMUS_LIB_H
+#define CMUS_LIB_H
 
 #include "editable.h"
 #include "search.h"
@@ -57,8 +57,10 @@ struct album {
 	char *sort_name;
 	char *collkey_name;
 	char *collkey_sort_name;
-	/* date of the first track added to this album */
+	/* max date of the tracks added to this album */
 	int date;
+	/* min date of the tracks added to this album */
+	int min_date;
 };
 
 struct artist {
@@ -134,11 +136,11 @@ void tree_toggle_expand_artist(void);
 void tree_expand_matching(const char *text);
 void tree_expand_all(void);
 void tree_sel_update(int changed);
-void tree_sel_current(void);
+void tree_sel_current(int auto_expand_albums);
 void tree_sel_first(void);
-void tree_sel_track(struct tree_track *t);
+void tree_sel_track(struct tree_track *t, int auto_expand_albums );
 int tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse);
-int __tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse);
+int _tree_for_each_sel(int (*cb)(void *data, struct track_info *ti), void *data, int reverse);
 
 struct track_info *sorted_activate_selected(void);
 void sorted_sel_current(void);

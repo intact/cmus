@@ -56,12 +56,6 @@
 #include <sys/wait.h>
 #include <dirent.h>
 
-#if defined(__sun__)
-#include <ncurses.h>
-#else
-#include <curses.h>
-#endif
-
 static struct history cmd_history;
 static char *cmd_history_filename;
 static char *history_search_text = NULL;
@@ -353,6 +347,27 @@ static int flag_to_view(int flag)
 	}
 }
 
+struct window *current_win(void)
+{
+	switch (cur_view) {
+	case TREE_VIEW:
+		return lib_cur_win;
+	case SORTED_VIEW:
+		return lib_editable.win;
+	case PLAYLIST_VIEW:
+		return pl_editable.win;
+	case QUEUE_VIEW:
+		return pq_editable.win;
+	case BROWSER_VIEW:
+		return browser_win;
+	case HELP_VIEW:
+		return help_win;
+	case FILTERS_VIEW:
+	default:
+		return filters_win;
+	}
+}
+
 static void cmd_add(char *arg)
 {
 	int flag = parse_flags((const char **)&arg, "lpqQ");
@@ -425,6 +440,14 @@ static void cmd_set(char *arg)
 	if (value) {
 		option_set(arg, value);
 		help_win->changed = 1;
+		if (cur_view == TREE_VIEW) {
+			lib_track_win->changed = 1;
+			lib_tree_win->changed = 1;
+		} else {
+			current_win()->changed = 1;
+		}
+		update_titleline();
+		update_statusline();
 	} else {
 		struct cmus_opt *opt;
 		char buf[OPTION_MAX_SIZE];
@@ -455,6 +478,14 @@ static void cmd_toggle(char *arg)
 	}
 	opt->toggle(opt->id);
 	help_win->changed = 1;
+	if (cur_view == TREE_VIEW) {
+		lib_track_win->changed = 1;
+		lib_tree_win->changed = 1;
+	} else {
+		current_win()->changed = 1;
+	}
+	update_titleline();
+	update_statusline();
 }
 
 static int get_number(char *str, char **end)
@@ -910,7 +941,7 @@ error:
 	return NULL;
 }
 
-static char **parse_cmd(const char *cmd, int *args_idx, int *ac)
+char **parse_cmd(const char *cmd, int *args_idx, int *ac)
 {
 	char **av = NULL;
 	int nr = 0;
@@ -993,16 +1024,16 @@ static void cmd_run(char *arg)
 	editable_lock();
 	switch (cur_view) {
 	case TREE_VIEW:
-		__tree_for_each_sel(add_ti, &sel, 0);
+		_tree_for_each_sel(add_ti, &sel, 0);
 		break;
 	case SORTED_VIEW:
-		__editable_for_each_sel(&lib_editable, add_ti, &sel, 0);
+		_editable_for_each_sel(&lib_editable, add_ti, &sel, 0);
 		break;
 	case PLAYLIST_VIEW:
-		__editable_for_each_sel(&pl_editable, add_ti, &sel, 0);
+		_editable_for_each_sel(&pl_editable, add_ti, &sel, 0);
 		break;
 	case QUEUE_VIEW:
-		__editable_for_each_sel(&pq_editable, add_ti, &sel, 0);
+		_editable_for_each_sel(&pq_editable, add_ti, &sel, 0);
 		break;
 	}
 	editable_unlock();
@@ -1131,16 +1162,16 @@ static void cmd_echo(char *arg)
 	editable_lock();
 	switch (cur_view) {
 	case TREE_VIEW:
-		__tree_for_each_sel(get_one_ti, &sel_ti, 0);
+		_tree_for_each_sel(get_one_ti, &sel_ti, 0);
 		break;
 	case SORTED_VIEW:
-		__editable_for_each_sel(&lib_editable, get_one_ti, &sel_ti, 0);
+		_editable_for_each_sel(&lib_editable, get_one_ti, &sel_ti, 0);
 		break;
 	case PLAYLIST_VIEW:
-		__editable_for_each_sel(&pl_editable, get_one_ti, &sel_ti, 0);
+		_editable_for_each_sel(&pl_editable, get_one_ti, &sel_ti, 0);
 		break;
 	case QUEUE_VIEW:
-		__editable_for_each_sel(&pq_editable, get_one_ti, &sel_ti, 0);
+		_editable_for_each_sel(&pq_editable, get_one_ti, &sel_ti, 0);
 		break;
 	}
 	editable_unlock();
@@ -1311,6 +1342,14 @@ static void cmd_p_prev(char *arg)
 static void cmd_p_stop(char *arg)
 {
 	player_stop();
+}
+
+static void cmd_pwd(char *arg)
+{
+	char buf[4096];
+	if (getcwd(buf, sizeof buf)) {
+		info_msg("%s", buf);
+	}
 }
 
 static void cmd_search_next(char *arg)
@@ -1590,7 +1629,7 @@ static void cmd_win_sel_cur(char *arg)
 	editable_lock();
 	switch (cur_view) {
 	case TREE_VIEW:
-		tree_sel_current();
+		tree_sel_current(auto_expand_albums_selcur);
 		break;
 	case SORTED_VIEW:
 		sorted_sel_current();
@@ -1644,27 +1683,6 @@ static void cmd_win_toggle(char *arg)
 	}
 }
 
-static struct window *current_win(void)
-{
-	switch (cur_view) {
-	case TREE_VIEW:
-		return lib_cur_win;
-	case SORTED_VIEW:
-		return lib_editable.win;
-	case PLAYLIST_VIEW:
-		return pl_editable.win;
-	case QUEUE_VIEW:
-		return pq_editable.win;
-	case BROWSER_VIEW:
-		return browser_win;
-	case HELP_VIEW:
-		return help_win;
-	case FILTERS_VIEW:
-	default:
-		return filters_win;
-	}
-}
-
 static void cmd_win_scroll_down(char *arg)
 {
 	editable_lock();
@@ -1688,8 +1706,18 @@ static void cmd_win_bottom(char *arg)
 
 static void cmd_win_down(char *arg)
 {
+	unsigned num_rows = 1;
+	char *end;
+
+	if (arg) {
+		if ((num_rows = get_number(arg, &end)) == 0 || *end) {
+			error_msg("invalid argument\n");
+			return;
+		}
+	}
+
 	editable_lock();
-	window_down(current_win(), 1);
+	window_down(current_win(), num_rows);
 	editable_unlock();
 }
 
@@ -1763,8 +1791,18 @@ static void cmd_win_top(char *arg)
 
 static void cmd_win_up(char *arg)
 {
+	unsigned num_rows = 1;
+	char *end;
+
+	if (arg) {
+		if ((num_rows = get_number(arg, &end)) == 0 || *end) {
+			error_msg("invalid argument\n");
+			return;
+		}
+	}
+
 	editable_lock();
-	window_up(current_win(), 1);
+	window_up(current_win(), num_rows);
 	editable_unlock();
 }
 
@@ -2543,6 +2581,7 @@ struct command commands[] = {
 	{ "player-stop",	cmd_p_stop,	0, 0, NULL,		  0, 0 },
 	{ "prev-view",		cmd_prev_view,	0, 0, NULL,		  0, 0 },
 	{ "push",		cmd_push,	1,-1, expand_commands,	  0, 0 },
+	{ "pwd",		cmd_pwd,	0, 0, NULL,		  0, 0 },
 	{ "quit",		cmd_quit,	0, 1, NULL,		  0, 0 },
 	{ "refresh",		cmd_refresh,	0, 0, NULL,		  0, 0 },
 	{ "run",		cmd_run,	1,-1, expand_program_paths, 0, CMD_UNSAFE },
@@ -2569,7 +2608,7 @@ struct command commands[] = {
 	{ "win-add-Q",		cmd_win_add_Q,	0, 0, NULL,		  0, 0 },
 	{ "win-add-q",		cmd_win_add_q,	0, 0, NULL,		  0, 0 },
 	{ "win-bottom",		cmd_win_bottom,	0, 0, NULL,		  0, 0 },
-	{ "win-down",		cmd_win_down,	0, 0, NULL,		  0, 0 },
+	{ "win-down",		cmd_win_down,	0, 1, NULL,		  0, 0 },
 	{ "win-mv-after",	cmd_win_mv_after,0, 0, NULL,		  0, 0 },
 	{ "win-mv-before",	cmd_win_mv_before,0, 0, NULL,		  0, 0 },
 	{ "win-next",		cmd_win_next,	0, 0, NULL,		  0, 0 },
@@ -2584,7 +2623,7 @@ struct command commands[] = {
 	{ "win-sel-cur",	cmd_win_sel_cur,0, 0, NULL,		  0, 0 },
 	{ "win-toggle",		cmd_win_toggle,	0, 0, NULL,		  0, 0 },
 	{ "win-top",		cmd_win_top,	0, 0, NULL,		  0, 0 },
-	{ "win-up",		cmd_win_up,	0, 0, NULL,		  0, 0 },
+	{ "win-up",		cmd_win_up,	0, 1, NULL,		  0, 0 },
 	{ "win-update",		cmd_win_update,	0, 0, NULL,		  0, 0 },
 	{ "win-update-cache",	cmd_win_update_cache,0, 1, NULL,	  0, 0 },
 	{ "wq",			cmd_quit,	0, 1, NULL,		  0, 0 },
@@ -3017,6 +3056,32 @@ void command_mode_key(int key)
 		d_print("key = %c (%d)\n", key, key);
 	}
 	reset_history_search();
+}
+
+void command_mode_mouse(MEVENT *event)
+{
+	if ((event->bstate & BUTTON1_PRESSED) || (event->bstate & BUTTON3_PRESSED)) {
+		if (event->y <= window_get_nr_rows(current_win()) + 2) {
+			if (cmdline.blen) {
+				history_add_line(&cmd_history, cmdline.line);
+				cmdline_clear();
+			}
+			input_mode = NORMAL_MODE;
+			normal_mode_mouse(event);
+			return;
+		}
+		if (event->x == 0)
+			return;
+		int i = event->x > cmdline.clen ? cmdline.clen : event->x - 1;
+		while (i < cmdline.cpos)
+			cmdline_move_left();
+		while (i > cmdline.cpos)
+			cmdline_move_right();
+	} else if (event->bstate & BUTTON4_PRESSED) {
+		command_mode_key(KEY_UP);
+	} else if (event->bstate & BUTTON5_PRESSED) {
+		command_mode_key(KEY_DOWN);
+	}
 }
 
 void commands_init(void)

@@ -16,30 +16,43 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _UTILS_H
-#define _UTILS_H
+#ifndef CMUS_UTILS_H
+#define CMUS_UTILS_H
 
 #ifdef HAVE_CONFIG
 #include "config/utils.h"
 #endif
+
+#include "compiler.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdio.h>
 #include <time.h>
 #include <stdint.h>
 #ifdef HAVE_BYTESWAP_H
 #include <byteswap.h>
 #endif
 
+
 #define N_ELEMENTS(array) (sizeof(array) / sizeof((array)[0]))
 
 #define STRINGIZE_HELPER(x) #x
 #define STRINGIZE(x) STRINGIZE_HELPER(x)
 
+#define CONCATENATE_HELPER(x,y) x##y
+#define CONCATENATE(x,y) CONCATENATE_HELPER(x,y)
+
 #define getentry(ptr, offset, type) (*((type *) ((void *) ((char *) (ptr) + (offset)))))
+
+#define STATIC_ASSERT(cond) \
+	static uint8_t CONCATENATE(_cmus_unused_, __LINE__)[2*(cond) - 1] UNUSED
+
 
 static inline int min(int a, int b)
 {
@@ -222,6 +235,33 @@ static inline uint16_t read_le16(const char *buf)
 	const unsigned char *b = (const unsigned char *)buf;
 
 	return b[0] | (b[1] << 8);
+}
+
+static int _saved_stdout;
+static int _saved_stderr;
+
+static inline void disable_stdio(void)
+{
+	_saved_stdout = dup(1);
+	_saved_stderr = dup(2);
+	if (_saved_stdout == -1 || _saved_stderr == -1) {
+		return;
+	}
+
+	int devnull = open("/dev/null", O_WRONLY);
+	dup2(devnull, 1);
+	dup2(devnull, 2);
+	close(devnull);
+}
+
+static inline void enable_stdio(void)
+{
+	fflush(stdout);
+	fflush(stderr);
+	while (dup2(_saved_stdout, 1) == -1 && errno == EINTR) { }
+	while (dup2(_saved_stderr, 2) == -1 && errno == EINTR) { }
+	close(_saved_stdout);
+	close(_saved_stderr);
 }
 
 #endif

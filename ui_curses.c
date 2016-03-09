@@ -34,7 +34,6 @@
 #include "xmalloc.h"
 #include "xstrjoin.h"
 #include "window.h"
-#include "format_print.h"
 #include "comment.h"
 #include "misc.h"
 #include "prog.h"
@@ -71,6 +70,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <math.h>
+#include <sys/time.h>
 
 #if defined(__sun__) || defined(__CYGWIN__)
 /* TIOCGWINSZ */
@@ -86,7 +86,7 @@ char *tgoto(const char *cap, int col, int row);
 
 /* globals. documented in ui_curses.h */
 
-int cmus_running = 1;
+sig_atomic_t cmus_running = 1;
 int ui_initialized = 0;
 enum ui_input_mode input_mode = NORMAL_MODE;
 int cur_view = TREE_VIEW;
@@ -250,11 +250,14 @@ enum {
 	TF_DISC,
 	TF_TRACK,
 	TF_TITLE,
+	TF_PLAY_COUNT,
 	TF_YEAR,
+	TF_MAX_YEAR,
 	TF_ORIGINALYEAR,
 	TF_GENRE,
 	TF_COMMENT,
 	TF_DURATION,
+	TF_DURATION_SEC,
 	TF_BITRATE,
 	TF_CODEC,
 	TF_CODEC_PROFILE,
@@ -278,6 +281,21 @@ enum {
 	TF_PART,
 	TF_SUBTITLE,
 	TF_MEDIA,
+	TF_VA,
+	TF_STATUS,
+	TF_POSITION,
+	TF_POSITION_SEC,
+	TF_TOTAL,
+	TF_VOLUME,
+	TF_LVOLUME,
+	TF_RVOLUME,
+	TF_BUFFER,
+	TF_REPEAT,
+	TF_CONTINUE,
+	TF_FOLLOW,
+	TF_SHUFFLE,
+	TF_PLAYLISTMODE,
+
 	NR_TFS
 };
 
@@ -288,11 +306,14 @@ static struct format_option track_fopts[NR_TFS + 1] = {
 	DEF_FO_INT('D', "discnumber", 1),
 	DEF_FO_INT('n', "tracknumber", 1),
 	DEF_FO_STR('t', "title", 0),
+	DEF_FO_INT('X', "play_count", 0),
 	DEF_FO_INT('y', "date", 1),
+	DEF_FO_INT('\0', "maxdate", 1),
 	DEF_FO_INT('\0', "originaldate", 1),
 	DEF_FO_STR('g', "genre", 0),
 	DEF_FO_STR('c', "comment", 0),
 	DEF_FO_TIME('d', "duration", 0),
+	DEF_FO_INT('\0', "duration_sec", 1),
 	DEF_FO_INT('\0', "bitrate", 0),
 	DEF_FO_STR('\0', "codec", 0),
 	DEF_FO_STR('\0', "codec_profile", 0),
@@ -316,44 +337,29 @@ static struct format_option track_fopts[NR_TFS + 1] = {
 	DEF_FO_STR('\0', "part", 0),
 	DEF_FO_STR('\0', "subtitle", 0),
 	DEF_FO_STR('\0', "media", 0),
+	DEF_FO_INT('\0', "va", 0),
+	DEF_FO_STR('\0', "status", 0),
+	DEF_FO_TIME('\0', "position", 0),
+	DEF_FO_INT('\0', "position_sec", 1),
+	DEF_FO_TIME('\0', "total", 0),
+	DEF_FO_INT('\0', "volume", 1),
+	DEF_FO_INT('\0', "lvolume", 1),
+	DEF_FO_INT('\0', "rvolume", 1),
+	DEF_FO_INT('\0', "buffer", 1),
+	DEF_FO_STR('\0', "repeat", 0),
+	DEF_FO_STR('\0', "continue", 0),
+	DEF_FO_STR('\0', "follow", 0),
+	DEF_FO_STR('\0', "shuffle", 0),
+	DEF_FO_STR('\0', "playlist_mode", 0),
 	DEF_FO_END
 };
 
-enum {
-	SF_STATUS,
-	SF_POSITION,
-	SF_DURATION,
-	SF_TOTAL,
-	SF_VOLUME,
-	SF_LVOLUME,
-	SF_RVOLUME,
-	SF_BUFFER,
-	SF_REPEAT,
-	SF_CONTINUE,
-	SF_FOLLOW,
-	SF_SHUFFLE,
-	SF_PLAYLISTMODE,
-	SF_BITRATE,
-	NR_SFS
-};
+static int last_mevent = 0;
 
-static struct format_option status_fopts[NR_SFS + 1] = {
-	DEF_FO_STR('s', NULL, 0),
-	DEF_FO_TIME('p', NULL, 0),
-	DEF_FO_TIME('d', NULL, 0),
-	DEF_FO_TIME('t', NULL, 0),
-	DEF_FO_INT('v', NULL, 0),
-	DEF_FO_INT('l', NULL, 0),
-	DEF_FO_INT('r', NULL, 0),
-	DEF_FO_INT('b', NULL, 0),
-	DEF_FO_STR('R', NULL, 0),
-	DEF_FO_STR('C', NULL, 0),
-	DEF_FO_STR('F', NULL, 0),
-	DEF_FO_STR('S', NULL, 0),
-	DEF_FO_STR('L', NULL, 0),
-	DEF_FO_INT('B', NULL, 0),
-	DEF_FO_END
-};
+int get_track_win_x(void)
+{
+	return track_win_x;
+}
 
 int track_format_valid(const char *format)
 {
@@ -523,52 +529,6 @@ static void sprint_ascii(int row, int col, const char *str, int len)
 	(void) mvaddstr(row, col, print_buffer);
 }
 
-static void print_tree(struct window *win, int row, struct iter *iter)
-{
-	const char *str;
-	struct artist *artist;
-	struct album *album;
-	struct iter sel;
-	int current, selected, active, pos;
-
-	artist = iter_to_artist(iter);
-	album = iter_to_album(iter);
-	current = 0;
-	if (lib_cur_track) {
-		if (album) {
-			current = CUR_ALBUM == album;
-		} else {
-			current = CUR_ARTIST == artist;
-		}
-	}
-	window_get_sel(win, &sel);
-	selected = iters_equal(iter, &sel);
-	active = lib_cur_win == lib_tree_win;
-	bkgdset(pairs[(active << 2) | (selected << 1) | current]);
-
-	if (active && selected) {
-		cursor_x = 0;
-		cursor_y = 1 + row;
-	}
-
-	pos = 0;
-	print_buffer[pos++] = ' ';
-	if (album) {
-		print_buffer[pos++] = ' ';
-		print_buffer[pos++] = ' ';
-		str = album->name;
-	} else {
-		if (display_artist_sort_name)
-			str = artist_sort_name(artist);
-		else
-			str = artist->name;
-	}
-	pos += format_str(print_buffer + pos, str, tree_win_w - pos - 1);
-	print_buffer[pos++] = ' ';
-	print_buffer[pos++] = 0;
-	dump_print_buffer(tree_win_y + row + 1, tree_win_x);
-}
-
 static inline void fopt_set_str(struct format_option *fopt, const char *str)
 {
 	BUG_ON(fopt->type != FO_STR);
@@ -615,6 +575,7 @@ static void fill_track_fopts_track_info(struct track_info *info)
 	fopt_set_str(&track_fopts[TF_ALBUMARTIST], info->albumartist);
 	fopt_set_str(&track_fopts[TF_ARTIST], info->artist);
 	fopt_set_str(&track_fopts[TF_ALBUM], info->album);
+	fopt_set_int(&track_fopts[TF_PLAY_COUNT], info->play_count, 0);
 	fopt_set_int(&track_fopts[TF_DISC], info->discnumber, info->discnumber == -1);
 	fopt_set_int(&track_fopts[TF_TRACK], info->tracknumber, info->tracknumber == -1);
 	fopt_set_str(&track_fopts[TF_TITLE], info->title);
@@ -622,6 +583,7 @@ static void fill_track_fopts_track_info(struct track_info *info)
 	fopt_set_str(&track_fopts[TF_GENRE], info->genre);
 	fopt_set_str(&track_fopts[TF_COMMENT], info->comment);
 	fopt_set_time(&track_fopts[TF_DURATION], info->duration, info->duration == -1);
+	fopt_set_int(&track_fopts[TF_DURATION_SEC], info->duration, info->duration == -1);
 	fopt_set_double(&track_fopts[TF_RG_TRACK_GAIN], info->rg_track_gain, isnan(info->rg_track_gain));
 	fopt_set_double(&track_fopts[TF_RG_TRACK_PEAK], info->rg_track_peak, isnan(info->rg_track_peak));
 	fopt_set_double(&track_fopts[TF_RG_ALBUM_GAIN], info->rg_album_gain, isnan(info->rg_album_gain));
@@ -645,11 +607,126 @@ static void fill_track_fopts_track_info(struct track_info *info)
 	fopt_set_str(&track_fopts[TF_PART], keyvals_get_val(info->comments, "part"));
 	fopt_set_str(&track_fopts[TF_SUBTITLE], keyvals_get_val(info->comments, "subtitle"));
 	fopt_set_str(&track_fopts[TF_MEDIA], info->media);
+	fopt_set_int(&track_fopts[TF_VA], 0, !track_is_compilation(info->comments));
 	if (is_http_url(info->filename)) {
 		fopt_set_str(&track_fopts[TF_FILE], filename);
 	} else {
 		fopt_set_str(&track_fopts[TF_FILE], path_basename(filename));
 	}
+}
+
+static void fill_track_fopts_album(struct album *album)
+{
+	fopt_set_int(&track_fopts[TF_YEAR], album->min_date / 10000, album->min_date <= 0);
+	fopt_set_int(&track_fopts[TF_MAX_YEAR], album->date / 10000, album->date <= 0);
+	fopt_set_str(&track_fopts[TF_ALBUMARTIST], album->artist->name);
+	fopt_set_str(&track_fopts[TF_ARTIST], album->artist->name);
+	fopt_set_str(&track_fopts[TF_ALBUM], album->name);
+}
+
+static void fill_track_fopts_artist(struct artist *artist)
+{
+	const char *name = display_artist_sort_name ? artist_sort_name(artist) : artist->name;
+	fopt_set_str(&track_fopts[TF_ARTIST], name);
+}
+
+const struct format_option *get_global_fopts(void)
+{
+	if (player_info.ti)
+		fill_track_fopts_track_info(player_info.ti);
+
+	static const char *status_strs[] = { ".", ">", "|" };
+	static const char *cont_strs[] = { " ", "C" };
+	static const char *follow_strs[] = { " ", "F" };
+	static const char *repeat_strs[] = { " ", "R" };
+	static const char *shuffle_strs[] = { " ", "S" };
+	int buffer_fill, vol, vol_left, vol_right;
+	int duration = -1;
+
+	editable_lock();
+	fopt_set_time(&track_fopts[TF_TOTAL], play_library ? lib_editable.total_time :
+			pl_editable.total_time, 0);
+	editable_unlock();
+
+	fopt_set_str(&track_fopts[TF_FOLLOW], follow_strs[follow]);
+	fopt_set_str(&track_fopts[TF_REPEAT], repeat_strs[repeat]);
+	fopt_set_str(&track_fopts[TF_SHUFFLE], shuffle_strs[shuffle]);
+	fopt_set_str(&track_fopts[TF_PLAYLISTMODE], aaa_mode_names[aaa_mode]);
+
+	if (player_info.ti)
+		duration = player_info.ti->duration;
+
+	vol_left = vol_right = vol = -1;
+	if (soft_vol) {
+		vol_left = soft_vol_l;
+		vol_right = soft_vol_r;
+		vol = (vol_left + vol_right + 1) / 2;
+	} else if (volume_max && volume_l >= 0 && volume_r >= 0) {
+		vol_left = scale_to_percentage(volume_l, volume_max);
+		vol_right = scale_to_percentage(volume_r, volume_max);
+		vol = (vol_left + vol_right + 1) / 2;
+	}
+	buffer_fill = scale_to_percentage(player_info.buffer_fill, player_info.buffer_size);
+
+	fopt_set_str(&track_fopts[TF_STATUS], status_strs[player_info.status]);
+
+	if (show_remaining_time && duration != -1) {
+		fopt_set_time(&track_fopts[TF_POSITION], player_info.pos - duration, 0);
+	} else {
+		fopt_set_time(&track_fopts[TF_POSITION], player_info.pos, 0);
+	}
+
+	fopt_set_int(&track_fopts[TF_POSITION_SEC], player_info.pos, player_info.pos < 0);
+	fopt_set_time(&track_fopts[TF_DURATION], duration, duration < 0);
+	fopt_set_int(&track_fopts[TF_VOLUME], vol, vol < 0);
+	fopt_set_int(&track_fopts[TF_LVOLUME], vol_left, vol_left < 0);
+	fopt_set_int(&track_fopts[TF_RVOLUME], vol_right, vol_right < 0);
+	fopt_set_int(&track_fopts[TF_BUFFER], buffer_fill, 0);
+	fopt_set_str(&track_fopts[TF_CONTINUE], cont_strs[player_cont]);
+	fopt_set_int(&track_fopts[TF_BITRATE], player_info.current_bitrate / 1000. + 0.5, 0);
+
+	return track_fopts;
+}
+
+static void print_tree(struct window *win, int row, struct iter *iter)
+{
+	struct artist *artist;
+	struct album *album;
+	struct iter sel;
+	int current, selected, active, pos;
+
+	artist = iter_to_artist(iter);
+	album = iter_to_album(iter);
+	current = 0;
+	if (lib_cur_track) {
+		if (album) {
+			current = CUR_ALBUM == album;
+		} else {
+			current = CUR_ARTIST == artist;
+		}
+	}
+	window_get_sel(win, &sel);
+	selected = iters_equal(iter, &sel);
+	active = lib_cur_win == lib_tree_win;
+	bkgdset(pairs[(active << 2) | (selected << 1) | current]);
+
+	if (active && selected) {
+		cursor_x = 0;
+		cursor_y = 1 + row;
+	}
+
+	print_buffer[0] = ' ';
+	if (album) {
+		fill_track_fopts_album(album);
+		format_print(print_buffer + 1, tree_win_w - 2, tree_win_format, track_fopts);
+	} else {
+		fill_track_fopts_artist(artist);
+		format_print(print_buffer + 1, tree_win_w - 2, tree_win_artist_format, track_fopts);
+	}
+	pos = strlen(print_buffer);
+	print_buffer[pos++] = ' ';
+	print_buffer[pos++] = 0;
+	dump_print_buffer(tree_win_y + row + 1, tree_win_x);
 }
 
 static void print_track(struct window *win, int row, struct iter *iter)
@@ -666,22 +743,20 @@ static void print_track(struct window *win, int row, struct iter *iter)
 
 	if (track == (struct tree_track*)album) {
 		int pos;
+		struct fp_len len;
 
 		/* FIXME:
 		 * replace A_BOLD by something useful */
 		bkgdset(A_BOLD);
-		print_buffer[0] = ' ';
-		pos = format_str(print_buffer + 1, album->name, track_win_w - 2);
-		print_buffer[++pos] = ' ';
-		print_buffer[++pos] = 0;
+
+		fill_track_fopts_album(album);
+
+		len = format_print(print_buffer, track_win_w, track_win_album_format, track_fopts);
 		dump_print_buffer(track_win_y + row + 1, track_win_x);
 
 		bkgdset(pairs[CURSED_SEPARATOR]);
-		pos = track_win_x + u_str_width(album->name) + 2;
-		while (pos < COLS) {
+		for(pos = track_win_x + len.llen; pos < COLS - len.rlen; ++pos)
 			(void) mvaddch(track_win_y + row + 1, pos, ACS_HLINE);
-			pos++;
-		}
 
 		return;
 	}
@@ -700,16 +775,14 @@ static void print_track(struct window *win, int row, struct iter *iter)
 	ti = tree_track_info(track);
 	fill_track_fopts_track_info(ti);
 
+	format = track_win_format;
 	if (track_info_has_tag(ti)) {
-		if (track_is_compilation(ti->comments))
+		if (*track_win_format_va && track_is_compilation(ti->comments))
 			format = track_win_format_va;
-		else
-			format = track_win_format;
-
-		format_print(print_buffer, track_win_w, format, track_fopts);
-	} else {
-		format_print(print_buffer, track_win_w, track_win_alt_format, track_fopts);
+	} else if (*track_win_alt_format) {
+		format = track_win_alt_format;
 	}
+	format_print(print_buffer, track_win_w, format, track_fopts);
 	dump_print_buffer(track_win_y + row + 1, track_win_x);
 }
 
@@ -743,16 +816,14 @@ static void print_editable(struct window *win, int row, struct iter *iter)
 
 	fill_track_fopts_track_info(track->info);
 
+	format = list_win_format;
 	if (track_info_has_tag(track->info)) {
-		if (track_is_compilation(track->info->comments))
+		if (*list_win_format_va && track_is_compilation(track->info->comments))
 			format = list_win_format_va;
-		else
-			format = list_win_format;
-
-		format_print(print_buffer, COLS, format, track_fopts);
-	} else {
-		format_print(print_buffer, COLS, list_win_alt_format, track_fopts);
+	} else if (*list_win_alt_format) {
+		format = list_win_alt_format;
 	}
+	format_print(print_buffer, COLS, format, track_fopts);
 	dump_print_buffer(row + 1, 0);
 }
 
@@ -842,7 +913,7 @@ static void print_help(struct window *win, int row, struct iter *iter)
 	int selected;
 	int pos;
 	int active = 1;
-	char buf[512];
+	char buf[OPTION_MAX_SIZE];
 	const struct help_entry *e = iter_to_help_entry(iter);
 	const struct cmus_opt *opt;
 
@@ -1081,102 +1152,10 @@ static void do_update_view(int full)
 
 static void do_update_statusline(void)
 {
-	static const char *status_strs[] = { ".", ">", "|" };
-	static const char *cont_strs[] = { " ", "C" };
-	static const char *follow_strs[] = { " ", "F" };
-	static const char *repeat_strs[] = { " ", "R" };
-	static const char *shuffle_strs[] = { " ", "S" };
-	int buffer_fill, vol, vol_left, vol_right;
-	int duration = -1;
-	char *msg;
-	char format[80];
-
-	editable_lock();
-	fopt_set_time(&status_fopts[SF_TOTAL], play_library ? lib_editable.total_time :
-			pl_editable.total_time, 0);
-	editable_unlock();
-
-	fopt_set_str(&status_fopts[SF_FOLLOW], follow_strs[follow]);
-	fopt_set_str(&status_fopts[SF_REPEAT], repeat_strs[repeat]);
-	fopt_set_str(&status_fopts[SF_SHUFFLE], shuffle_strs[shuffle]);
-	fopt_set_str(&status_fopts[SF_PLAYLISTMODE], aaa_mode_names[aaa_mode]);
-
 	player_info_lock();
+	format_print(print_buffer, COLS, statusline_format, get_global_fopts());
 
-	if (player_info.ti)
-		duration = player_info.ti->duration;
-
-	vol_left = vol_right = vol = -1;
-	if (soft_vol) {
-		vol_left = soft_vol_l;
-		vol_right = soft_vol_r;
-		vol = (vol_left + vol_right + 1) / 2;
-	} else if (volume_max && volume_l >= 0 && volume_r >= 0) {
-		vol_left = scale_to_percentage(volume_l, volume_max);
-		vol_right = scale_to_percentage(volume_r, volume_max);
-		vol = (vol_left + vol_right + 1) / 2;
-	}
-	buffer_fill = scale_to_percentage(player_info.buffer_fill, player_info.buffer_size);
-
-	fopt_set_str(&status_fopts[SF_STATUS], status_strs[player_info.status]);
-
-	if (show_remaining_time && duration != -1) {
-		fopt_set_time(&status_fopts[SF_POSITION], player_info.pos - duration, 0);
-	} else {
-		fopt_set_time(&status_fopts[SF_POSITION], player_info.pos, 0);
-	}
-
-	fopt_set_time(&status_fopts[SF_DURATION], duration, 0);
-	fopt_set_int(&status_fopts[SF_VOLUME], vol, 0);
-	fopt_set_int(&status_fopts[SF_LVOLUME], vol_left, 0);
-	fopt_set_int(&status_fopts[SF_RVOLUME], vol_right, 0);
-	fopt_set_int(&status_fopts[SF_BUFFER], buffer_fill, 0);
-	fopt_set_str(&status_fopts[SF_CONTINUE], cont_strs[player_cont]);
-	fopt_set_int(&status_fopts[SF_BITRATE], player_info.current_bitrate / 1000. + 0.5, 0);
-
-	if (show_playback_position) {
-		strcpy(format, " %s %p ");
-		if (duration != -1)
-			strcat(format, "/ %d ");
-	} else {
-		strcpy(format, " %s ");
-		if (duration != -1)
-			strcat(format, "%d ");
-	}
-	strcat(format, "- %t ");
-	if (vol >= 0) {
-		if (vol_left != vol_right) {
-			strcat(format, "vol: %l,%r ");
-		} else {
-			strcat(format, "vol: %v ");
-		}
-	}
-	if (player_info.ti) {
-		if (is_http_url(player_info.ti->filename))
-			strcat(format, "buf: %b ");
-		if (show_current_bitrate && player_info.current_bitrate >= 0)
-			strcat(format, " %B kbps ");
-	}
-	strcat(format, "%=");
-	if (player_repeat_current) {
-		strcat(format, "repeat current");
-	} else if (play_library) {
-		/* artist/album modes work only in lib */
-		if (shuffle) {
-			/* shuffle overrides sorted mode */
-			strcat(format, "%L from library");
-		} else if (play_sorted) {
-			strcat(format, "%L from sorted library");
-		} else {
-			strcat(format, "%L from library");
-		}
-	} else {
-		strcat(format, "playlist");
-	}
-	strcat(format, " | %1C%1F%1R%1S ");
-	format_print(print_buffer, COLS, format, status_fopts);
-
-	msg = player_info.error_msg;
+	char *msg = player_info.error_msg;
 	player_info.error_msg = NULL;
 
 	player_info_unlock();
@@ -1336,7 +1315,7 @@ static void do_update_titleline(void)
 			}
 		}
 
-		if (use_alt_format) {
+		if (use_alt_format && *current_alt_format) {
 			format_print(print_buffer, COLS, current_alt_format, track_fopts);
 		} else {
 			format_print(print_buffer, COLS, current_format, track_fopts);
@@ -1344,7 +1323,7 @@ static void do_update_titleline(void)
 		dump_print_buffer(LINES - 3, 0);
 
 		/* set window title */
-		if (use_alt_format) {
+		if (use_alt_format && *window_title_alt_format) {
 			format_print(print_buffer, print_buffer_max_width,
 					window_title_alt_format, track_fopts);
 		} else {
@@ -1826,7 +1805,7 @@ static void spawn_status_program(void)
 		free(argv[i]);
 }
 
-static int ctrl_c_pressed = 0;
+static sig_atomic_t ctrl_c_pressed = 0;
 
 static void sig_int(int sig)
 {
@@ -1838,7 +1817,7 @@ static void sig_shutdown(int sig)
 	cmus_running = 0;
 }
 
-static int needs_to_resize = 1;
+static sig_atomic_t needs_to_resize = 1;
 
 static void sig_winch(int sig)
 {
@@ -2031,6 +2010,25 @@ static void handle_key(int key)
 	}
 }
 
+static void handle_mouse(MEVENT *event)
+{
+#if NCURSES_MOUSE_VERSION <= 1
+	if ((last_mevent & BUTTON1_PRESSED) && (event->bstate & REPORT_MOUSE_POSITION))
+		event->bstate = BUTTON1_RELEASED;
+	last_mevent = event->bstate;
+#endif
+	clear_error();
+	if (input_mode == NORMAL_MODE) {
+		normal_mode_mouse(event);
+	} else if (input_mode == COMMAND_MODE) {
+		command_mode_mouse(event);
+		update_commandline();
+	} else if (input_mode == SEARCH_MODE) {
+		search_mode_mouse(event);
+		update_commandline();
+	}
+}
+
 static void u_getch(void)
 {
 	int key;
@@ -2041,6 +2039,13 @@ static void u_getch(void)
 	key = getch();
 	if (key == ERR || key == 0)
 		return;
+
+	if (key == KEY_MOUSE) {
+		MEVENT event;
+		if (getmouse(&event) == OK)
+			handle_mouse(&event);
+		return;
+	}
 
 	if (key > 255) {
 		handle_key(key);
@@ -2086,7 +2091,9 @@ static void u_getch(void)
 void ui_curses_notify(void)
 {
 	char c;
-	write(notify_in, &c, 1);
+	if (write(notify_in, &c, 1) == -1) {
+		d_print("write failed: %s\n", strerror(errno));
+	}
 }
 
 static void main_loop(void)
@@ -2202,7 +2209,9 @@ static void main_loop(void)
 
 		if (FD_ISSET(notify_out, &set)) {
 			char buf[128];
-			read(notify_out, buf, sizeof(buf));
+			if (read(notify_out, buf, sizeof(buf)) == -1) {
+				d_print("read failed: %s\n", strerror(errno));
+			}
 		}
 	}
 }
@@ -2318,12 +2327,13 @@ static void init_curses(void)
 			t_fs = "\007";
 		}
 	}
+	update_mouse();
 }
 
 static void notify_init(void)
 {
 	int fildes[2];
-	pipe(fildes);
+	BUG_ON(pipe(fildes) == -1);
 	notify_out = fildes[0];
 	notify_in = fildes[1];
 	int flags = fcntl(notify_in, F_GETFL, 0);
@@ -2433,7 +2443,7 @@ static const char *usage =
 "Usage: %s [OPTION]...\n"
 "Curses based music player.\n"
 "\n"
-"      --listen ADDR   listen on ADDR instead of $XDG_RUNTIME_DIR/cmus-socket\n"
+"      --listen ADDR   listen on ADDR instead of $CMUS_SOCKET or $XDG_RUNTIME_DIR/cmus-socket\n"
 "                      ADDR is either a UNIX socket or host[:port]\n"
 "                      WARNING: using TCP/IP is insecure!\n"
 "      --plugins       list available plugins and exit\n"

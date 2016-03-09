@@ -231,7 +231,7 @@ static const char *usage =
 "   or: %s\n"
 "Control cmus through socket.\n"
 "\n"
-"      --server ADDR    connect using ADDR instead of $XDG_RUNTIME_DIR/cmus-socket\n"
+"      --server ADDR    connect using ADDR instead of $CMUS_SOCKET or $XDG_RUNTIME_DIR/cmus-socket\n"
 "                       ADDR is either a UNIX socket or host[:port]\n"
 "                       WARNING: using TCP/IP is insecure!\n"
 "      --passwd PASSWD  password to use for TCP/IP connection\n"
@@ -293,7 +293,7 @@ int main(int argc, char *argv[])
 		case FLAG_VERSION:
 			printf("cmus " VERSION
 			       "\nCopyright 2004-2006 Timo Hirvonen"
-			       "\nCopyright 2008-2013 Various Authors\n");
+			       "\nCopyright 2008-2015 Various Authors\n");
 			return 0;
 		case FLAG_SERVER:
 			server = arg;

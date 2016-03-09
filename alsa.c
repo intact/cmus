@@ -19,31 +19,31 @@
 
 /*
  * snd_pcm_state_t:
- * 
+ *
  * Open
  * SND_PCM_STATE_OPEN = 0,
- * 
+ *
  * Setup installed
  * SND_PCM_STATE_SETUP = 1,
- * 
+ *
  * Ready to start
  * SND_PCM_STATE_PREPARED = 2,
- * 
+ *
  * Running
  * SND_PCM_STATE_RUNNING = 3,
- * 
+ *
  * Stopped: underrun (playback) or overrun (capture) detected
  * SND_PCM_STATE_XRUN = 4,
- * 
+ *
  * Draining: running (playback) or stopped (capture)
  * SND_PCM_STATE_DRAINING = 5,
- * 
+ *
  * Paused
  * SND_PCM_STATE_PAUSED = 6,
- * 
+ *
  * Hardware is suspended
  * SND_PCM_STATE_SUSPENDED = 7,
- * 
+ *
  * Hardware is disconnected
  * SND_PCM_STATE_DISCONNECTED = 8,
  */
@@ -125,6 +125,7 @@ static int op_alsa_exit(void)
 static int alsa_set_hw_params(void)
 {
 	snd_pcm_hw_params_t *hwparams = NULL;
+	unsigned int buffer_time_max = 300 * 1000; /* us */
 	const char *cmd;
 	unsigned int rate;
 	int rc, dir;
@@ -133,6 +134,12 @@ static int alsa_set_hw_params(void)
 
 	cmd = "snd_pcm_hw_params_any";
 	rc = snd_pcm_hw_params_any(alsa_handle, hwparams);
+	if (rc < 0)
+		goto error;
+
+	cmd = "snd_pcm_hw_params_set_buffer_time_max";
+	rc = snd_pcm_hw_params_set_buffer_time_max(alsa_handle, hwparams,
+	                                           &buffer_time_max, &dir);
 	if (rc < 0)
 		goto error;
 

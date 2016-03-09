@@ -29,6 +29,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -36,8 +37,16 @@
 #include <errno.h>
 #include <sys/mman.h>
 
+#define CACHE_VERSION   0x0c
+
 #define CACHE_64_BIT	0x01
 #define CACHE_BE	0x02
+
+#define CACHE_RESERVED_PATTERN  	0xff
+
+#define CACHE_ENTRY_USED_SIZE		24
+#define CACHE_ENTRY_RESERVED_SIZE	56
+#define CACHE_ENTRY_TOTAL_SIZE	(CACHE_ENTRY_RESERVED_SIZE + CACHE_ENTRY_USED_SIZE)
 
 // Cmus Track Cache version X + 4 bytes flags
 static char cache_header[8] = "CTC\0\0\0\0\0";
@@ -46,15 +55,24 @@ static char cache_header[8] = "CTC\0\0\0\0\0";
 // mtime is either 32 or 64 bits
 struct cache_entry {
 	// size of this struct including size itself
-	// NOTE: size does not include padding bytes
-	unsigned int size;
-	int duration;
-	long bitrate;
-	time_t mtime;
+	uint32_t size;
+
+	int32_t play_count;
+	int64_t mtime;
+	int32_t duration;
+	int32_t bitrate;
+
+	// when introducing new fields decrease the reserved space accordingly
+	uint8_t _reserved[CACHE_ENTRY_RESERVED_SIZE];
 
 	// filename, codec, codec_profile and N * (key, val)
 	char strings[];
 };
+
+// make sure our mmap/sizeof-based code works
+STATIC_ASSERT(CACHE_ENTRY_TOTAL_SIZE == sizeof(struct cache_entry));
+STATIC_ASSERT(CACHE_ENTRY_TOTAL_SIZE == offsetof(struct cache_entry, strings));
+
 
 #define ALIGN(size) (((size) + sizeof(long) - 1) & ~(sizeof(long) - 1))
 #define HASH_SIZE 1023
@@ -62,10 +80,9 @@ struct cache_entry {
 static struct track_info *hash_table[HASH_SIZE];
 static char *cache_filename;
 static int total;
-static int removed;
-static int new;
 
 pthread_mutex_t cache_mutex = CMUS_MUTEX_INITIALIZER;
+
 
 static void add_ti(struct track_info *ti, unsigned int hash)
 {
@@ -113,6 +130,7 @@ static struct track_info *cache_entry_to_ti(struct cache_entry *e)
 	ti->duration = e->duration;
 	ti->bitrate = e->bitrate;
 	ti->mtime = e->mtime;
+	ti->play_count = e->play_count;
 
 	// count strings (filename + codec + codec_profile + key/val pairs)
 	count = 0;
@@ -173,7 +191,6 @@ static void do_cache_remove_ti(struct track_info *ti, unsigned int hash)
 				hash_table[pos] = next;
 			}
 			total--;
-			removed++;
 			track_info_unref(ti);
 			return;
 		}
@@ -253,7 +270,7 @@ int cache_init(void)
 	cache_header[4] = flags & 0xff;
 
 	/* assumed version */
-	cache_header[3] = 0x09;
+	cache_header[3] = CACHE_VERSION;
 
 	cache_filename = xstrjoin(cmus_config_dir, "/cache");
 	return read_cache();
@@ -302,12 +319,15 @@ static void write_ti(int fd, struct gbuf *buf, struct track_info *ti, unsigned i
 	struct cache_entry e;
 	int *len, alloc = 64, count, i;
 
+	memset(e._reserved, CACHE_RESERVED_PATTERN, sizeof(e._reserved));
+
 	count = 0;
 	len = xnew(int, alloc);
 	e.size = sizeof(e);
 	e.duration = ti->duration;
 	e.bitrate = ti->bitrate;
 	e.mtime = ti->mtime;
+	e.play_count = ti->play_count;
 	len[count] = strlen(ti->filename) + 1;
 	e.size += len[count++];
 	len[count] = (ti->codec ? strlen(ti->codec) : 0) + 1;
@@ -352,9 +372,6 @@ int cache_close(void)
 	unsigned int offset;
 	int i, fd, rc;
 	char *tmp;
-
-	if (!new && !removed)
-		return 0;
 
 	tmp = xstrjoin(cmus_config_dir, "/cache.tmp");
 	fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -438,7 +455,6 @@ struct track_info *cache_get_ti(const char *filename, int force)
 		if (!ti)
 			return NULL;
 		add_ti(ti, hash);
-		new++;
 	}
 	track_info_ref(ti);
 	return ti;
@@ -491,7 +507,6 @@ struct track_info **cache_refresh(int *count, int force)
 			new_ti = ip_get_ti(ti->filename);
 			if (new_ti) {
 				add_ti(new_ti, hash);
-				new++;
 
 				if (ti->ref == 1) {
 					track_info_unref(ti);

@@ -18,6 +18,16 @@ check_cflags()
 	return 0
 }
 
+check_sndio()
+{
+	case `uname -s` in
+	OpenBSD)
+		check_library SNDIO "" "-lsndio"
+		return $?
+	esac
+	return 1
+}
+
 check_compat()
 {
 	COMPAT_LIBS=
@@ -92,10 +102,10 @@ int main(void)
 
 check_ncurses()
 {
-	if check_library NCURSES "" -lncursesw
+	if pkg_config NCURSES "ncursesw" "" "-lncursesw"
 	then
 		widechars=y
-	elif check_library NCURSES "" -lncurses || check_library NCURSES "" -lcurses
+	elif pkg_config NCURSES "ncurses" "" "-lncurses" || pkg_config NCURSES "curses" "" "-lcurses"
 	then
 		widechars=n
 		msg_error "Your ncurses does not support wide characters!"
@@ -164,14 +174,11 @@ check_cdio()
 
 check_flac()
 {
-	if pkg_config FLAC "flac" "" "-lFLAC -lm"
-	then
-		# Make sure the FLAC_CFLAGS value is sane, strip trailing '/FLAC'.
-		FLAC_CFLAGS=`echo $FLAC_CFLAGS | sed "s/FLAC$//"`
-		return 0
-	fi
-	check_library FLAC "" "-lFLAC -lvorbisfile -lm"
-	return $?
+	pkg_config FLAC "flac" "" "-lFLAC -lm" || return $?
+
+	# Make sure the FLAC_CFLAGS value is sane, strip trailing '/FLAC'.
+	FLAC_CFLAGS=`echo $FLAC_CFLAGS | sed "s/FLAC$//"`
+	return 0
 }
 
 check_mad()
@@ -213,6 +220,13 @@ check_modplug()
 		MODPLUG_API_8=1
 	fi
 	return 0
+}
+
+check_vtx()
+{
+	check_header ayemu.h &&
+	check_library VTX "" "-layemu"
+	return $?
 }
 
 check_vorbis()
@@ -457,6 +471,7 @@ Optional Features: y/n
   CONFIG_MP4      	MPEG-4 AAC (.mp4, .m4a, .m4b)                   [auto]
   CONFIG_AAC      	AAC (.aac, audio/aac, audio/aacp)               [auto]
   CONFIG_FFMPEG   	FFMPEG (.shn, .wma)                             [auto]
+  CONFIG_VTX    	libayemu (.vtx)                                 [auto]
   CONFIG_CUE    	CUE sheets (.cue)                               [auto]
   CONFIG_BASS     	libbass (.mod, .x3m, ...)                       [auto]
   CONFIG_ROAR           native RoarAudio output                         [auto]
@@ -467,6 +482,7 @@ Optional Features: y/n
   CONFIG_AO       	Libao cross-platform audio library              [auto]
   CONFIG_ARTS     	ARTS                                            [auto]
   CONFIG_OSS      	Open Sound System                               [auto]
+  CONFIG_SNDIO    	Sndio                                           [auto]
   CONFIG_SUN      	Sun Audio                                       [auto]
   CONFIG_WAVEOUT  	Windows Wave Out                                [auto]
   USE_FALLBACK_IP	Use a specific IP for every unrecognized	[n]
@@ -521,6 +537,7 @@ check check_mp4     CONFIG_MP4
 check check_aac     CONFIG_AAC
 check check_ffmpeg  CONFIG_FFMPEG
 check check_cue     CONFIG_CUE
+check check_vtx     CONFIG_VTX
 check check_bass    CONFIG_BASS
 # nothing to check, just validate the variable values
 check true          CONFIG_TREMOR
@@ -532,6 +549,7 @@ check check_samplerate CONFIG_SAMPLERATE
 check check_ao      CONFIG_AO
 check check_arts    CONFIG_ARTS
 check check_oss     CONFIG_OSS
+check check_sndio   CONFIG_SNDIO
 check check_sun     CONFIG_SUN
 check check_waveout CONFIG_WAVEOUT
 check check_roar    CONFIG_ROAR
@@ -569,7 +587,7 @@ config_header config/cue.h CONFIG_CUE
 CFLAGS="${CFLAGS} -DHAVE_CONFIG"
 
 makefile_vars bindir datadir libdir mandir exampledir
-makefile_vars CONFIG_CDIO CONFIG_FLAC CONFIG_MAD CONFIG_MIKMOD CONFIG_MODPLUG CONFIG_MPC CONFIG_VORBIS CONFIG_OPUS CONFIG_WAVPACK CONFIG_WAV CONFIG_MP4 CONFIG_AAC CONFIG_FFMPEG CONFIG_CUE CONFIG_BASS
-makefile_vars CONFIG_ROAR CONFIG_PULSE CONFIG_ALSA CONFIG_JACK CONFIG_SAMPLERATE CONFIG_AO CONFIG_ARTS CONFIG_OSS CONFIG_SUN CONFIG_WAVEOUT
+makefile_vars CONFIG_CDIO CONFIG_FLAC CONFIG_MAD CONFIG_MIKMOD CONFIG_MODPLUG CONFIG_MPC CONFIG_VORBIS CONFIG_OPUS CONFIG_WAVPACK CONFIG_WAV CONFIG_MP4 CONFIG_AAC CONFIG_FFMPEG CONFIG_CUE CONFIG_VTX CONFIG_BASS
+makefile_vars CONFIG_ROAR CONFIG_PULSE CONFIG_ALSA CONFIG_JACK CONFIG_SAMPLERATE CONFIG_AO CONFIG_ARTS CONFIG_OSS CONFIG_SNDIO CONFIG_SUN CONFIG_WAVEOUT
 
 generate_config_mk
